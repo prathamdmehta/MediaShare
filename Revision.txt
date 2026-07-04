@@ -1,0 +1,48 @@
+1. Why does get_db() use yield instead of return?
+get_db() uses yield so the database session can be handed to the request and then reliably cleaned up afterward, while return would just hand back the session with no guaranteed teardown.
+
+2. What does the healthcheck + depends_on in docker-compose.yml actually prevent?
+The healthcheck in docker-compose.yml mainly prevents dependent services from starting against a container that is running but not yet ready, which avoids startup race conditions.brtkwr+1
+
+3. Why is @lru_cache on get_settings() important — what goes wrong without it?
+@lru_cache on get_settings() is important because it creates the settings object once and reuses it, so you avoid re-reading config on every request and keep settings consistent across the app.
+
+4. What does Depends(get_current_user) actually do when a request hits a protected route?
+Depends(get_current_user) tells FastAPI to run your auth-check function before the route handler, so the request is blocked unless a valid user is extracted and attached to the request context.
+
+5. Why do we store the hash of the refresh token in the DB rather than the raw token?
+We store only the hash of a refresh token so a database leak cannot be used to mint new access tokens with the raw token value.
+
+6. What's the difference between 401 and 403 — when should each be returned?
+Use 401 Unauthorized when the client is not authenticated or the token is invalid/expired, and 403 Forbidden when the client is authenticated but not allowed to perform the action.
+
+7. Why did we use PATCH for profile updates instead of PUT?
+We used PATCH because profile edits are partial updates — the client may change just one or two fields without replacing the entire user resource the way PUT implies.
+
+8. What does exclude_unset=True prevent that would break PATCH behaviour without it?
+exclude_unset=True prevents fields the client did not send from being included with defaults like None, which would otherwise overwrite existing values and turn a partial update into accidental data loss.
+
+9. Why does the search endpoint return next_cursor: null when there's only one result?
+The search endpoint returns next_cursor: null when there is only one result because there is no additional page to fetch, so the API signals “no next page” with a null cursor.
+
+10. Why does the file go directly from the client to S3 instead of passing through FastAPI?
+The file goes straight from the client to S3 so FastAPI doesn’t become a bandwidth bottleneck for large uploads, and the backend only handles authorization and coordination.
+
+11. What is the upload_id stored in Redis for — why not just write to the DB immediately in /initiate?
+upload_id in Redis is temporary workflow state so /initiate can stay lightweight and you only write a permanent DB row after the upload actually succeeds.
+
+12. Why does the Celery worker use a sync psycopg2 connection instead of async SQLAlchemy?
+The Celery worker uses sync psycopg2 because task execution is blocking and simpler with a synchronous DB driver, while async SQLAlchemy would add event-loop complexity without much benefit there.
+
+13. Why does get_cluster_detail run is_blocked() on every request instead of caching the result?
+get_cluster_detail runs is_blocked() on every request because block state can change at any time, and authorization is safest when checked against current state instead of relying on a potentially stale cached decision.
+
+14. Why is is_deleted_by_recipient a soft delete instead of actually deleting the ShareClusterRecipient row?
+is_deleted_by_recipient is a soft delete so you can hide the cluster from that recipient without destroying the underlying share relationship, audit history, unread state, or sender-side visibility.
+
+{
+  "media_file_ids": ["fc923615-924a-4dab-bdb6-6728dda099a7"],
+  "recipient_usernames": ["userb"],
+  "message": "Check this out!"
+}
+

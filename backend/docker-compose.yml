@@ -1,0 +1,80 @@
+services:
+
+  # ── FastAPI application ───────────────────────────────────
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./app:/app/app      # live reload: your local code syncs into container
+      - ./alembic.ini:/app/alembic.ini  # live reload: your local code syncs into container
+    env_file:
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy   # don't start until postgres is ready
+      redis:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── PostgreSQL ─────────────────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: mediashare
+      POSTGRES_PASSWORD: mediashare_dev
+      POSTGRES_DB: mediashare_db
+    ports:
+      - "5432:5432"          # expose so you can connect via DBeaver/TablePlus
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # persist data between restarts
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U mediashare -d mediashare_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis ──────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ── LocalStack (fake AWS S3) ───────────────────────────────────
+  localstack:
+    image: localstack/localstack:3.0.2
+    ports:
+      - "4566:4566"          # all AWS services on one port
+    environment:
+      - SERVICES=s3          # only start S3 (faster, less memory)
+      - DEFAULT_REGION=us-east-1
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=us-east-1
+    volumes:
+      - localstack_data:/var/lib/localstack
+      - ./localstack-init:/etc/localstack/init/ready.d
+
+# ── Celery Worker ──────────────────────────────────────────────
+  worker:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+      - ./alembic.ini:/app/alembic.ini
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    command: celery -A app.workers.celery_app worker --loglevel=info
+
+volumes:
+  postgres_data:
+  localstack_data:
