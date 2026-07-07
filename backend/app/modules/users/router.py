@@ -8,6 +8,10 @@ from app.modules.users import schemas, service
 from app.modules.shares.service import block_user, unblock_user
 from app.modules.users.service import get_blocked_users
 
+import uuid
+import io
+from fastapi import UploadFile, File, HTTPException, status
+
 router = APIRouter()
 
 
@@ -101,3 +105,66 @@ async def get_my_blocked_users(
         }
         for u in users
     ]
+
+# Add these imports at the top
+
+# Add this endpoint
+@router.post("/me/avatar", status_code=200)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    # Validate file type
+    if file.content_type not in {"image/jpeg", "image/png", "image/webp"}:
+        raise HTTPException(
+            status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            "Avatar must be JPEG, PNG or WebP"
+        )
+
+    # Read file bytes
+    contents = await file.read()
+
+    # Limit to 5MB
+    if len(contents) > 5 * 1024 * 1024:
+        raise HTTPException(
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            "Avatar must be under 5MB"
+        )
+
+    from app.modules.media.storage import get_s3_client, get_presign_client
+    from app.config import get_settings
+    settings = get_settings()
+
+    ext = file.content_type.split("/")[-1]
+    s3_key = f"avatars/{current_user.id}/avatar.{ext}"
+
+    # Upload directly to S3 (small file — passes through API)
+    s3 = get_s3_client()
+    s3.put_object(
+        Bucket=settings.s3_bucket_name,
+        Key=s3_key,
+        Body=contents,
+        ContentType=file.content_type,
+    )
+
+    # Generate avatar URL using presign client (localhost for dev)
+    presign = get_presign_client()
+    avatar_url = presign.generate_presigned_url(
+        "get_object",
+        Params={"Bucket": settings.s3_bucket_name, "Key": s3_key},
+        ExpiresIn=86400,  # 24 hours
+    )
+
+    # Save s3_key to profile
+    from sqlalchemy import select
+    from app.modules.users.models import Profile
+    profile = await db.scalar(select(Profile).where(Profile.user_id == current_user.id))
+    if not profile:
+        profile = Profile(user_id=current_user.id)
+        db.add(profile)
+
+    profile.avatar_s3_key = s3_key
+    await db.flush()
+
+    return {"avatar_url": avatar_url, "s3_key": s3_key}

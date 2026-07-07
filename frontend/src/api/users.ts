@@ -35,4 +35,13 @@ export const usersApi = {
     // src/api/users.ts — add this method
     getBlockedUsers: () =>
         apiClient.get<{ username: string; display_name: string | null; avatar_url: string | null }[]>('/users/me/blocked'),
+
+    uploadAvatar: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return apiClient.post<{ avatar_url: string; s3_key: string }>(
+        '/users/me/avatar',
+        form,
+        { headers: { 'Content-Type': 'multipart/form-data' } }
+    )},
 }

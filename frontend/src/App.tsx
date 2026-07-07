@@ -1,10 +1,11 @@
 // src/App.tsx
 
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { BrowserRouter, Routes, Route } from 'react-router-dom'
 import { useEffect } from 'react'
 import { useAuthStore } from './store/authStore'
 import { authApi } from './api/auth'
 
+import LandingPage from './pages/LandingPage'
 import LoginPage from './pages/LoginPage'
 import RegisterPage from './pages/RegisterPage'
 import InboxPage from './pages/InboxPage'
@@ -18,7 +19,6 @@ import Layout from './components/layout/Layout'
 function App() {
     const { isAuthenticated, setAuth, clearAuth } = useAuthStore()
 
-    // On every app load — if we have a token, fetch the user object
     useEffect(() => {
         if (!isAuthenticated) return
         authApi.me()
@@ -26,17 +26,18 @@ function App() {
                 const token = localStorage.getItem('access_token') || ''
                 setAuth(res.data, token)
             })
-            .catch(() => {
-                // Token is invalid or expired — clear auth
-                clearAuth()
-            })
-    }, []) // runs once on mount
+            .catch(() => clearAuth())
+    }, [])
 
     return (
         <BrowserRouter>
             <Routes>
+                {/* Public routes */}
+                <Route path="/" element={<LandingPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
+
+                {/* Protected routes */}
                 <Route element={<ProtectedRoute />}>
                     <Route element={<Layout />}>
                         <Route path="/inbox" element={<InboxPage />} />
@@ -44,7 +45,6 @@ function App() {
                         <Route path="/upload" element={<UploadPage />} />
                         <Route path="/profile" element={<ProfilePage />} />
                         <Route path="/search" element={<SearchPage />} />
-                        <Route path="/" element={<Navigate to="/inbox" replace />} />
                     </Route>
                 </Route>
             </Routes>
