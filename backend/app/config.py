@@ -7,6 +7,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         case_sensitive=False,
+        extra="ignore",  # ignore extra fields in .env that aren't in this model
     )
 
     #App
@@ -33,6 +34,12 @@ class Settings(BaseSettings):
     # JWT
     access_token_expire_minutes: int = 15
     refresh_token_expire_days: int = 30
+
+    # Add these fields to the Settings class
+    google_client_id: str | None = None
+    google_client_secret: str | None = None
+    google_redirect_uri: str = "http://localhost:8000/api/v1/auth/google/callback"
+    anthropic_api_key: str | None = None
 
     @property
     def is_development(self) -> bool:

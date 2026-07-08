@@ -10,6 +10,8 @@ import { useNotificationStore } from "../../store/notificationStore";
 import { useState, useRef, useEffect } from "react";
 import apiClient from "../../api/client";
 
+import VoiceShare from "../VoiceShare"
+
 const Icons = {
   Inbox: () => (
     <svg
@@ -150,6 +152,8 @@ export default function Layout() {
   const [notifications, setNotifications] = useState<any[]>([]);
   const [loadingNotifs, setLoadingNotifs] = useState(false);
   const bellRef = useRef<HTMLDivElement>(null);
+
+  const [showVoice, setShowVoice] = useState(false)
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -485,6 +489,33 @@ export default function Layout() {
               </div>
             )}
           </div>
+          <button
+    onClick={() => setShowVoice(true)}
+    title="Voice Share"
+    style={{
+        width: '30px', height: '30px',
+        borderRadius: '8px',
+        border: '1px solid var(--border)',
+        background: 'transparent',
+        color: 'var(--muted)',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: '15px',
+        transition: 'all 0.15s ease',
+    }}
+    onMouseEnter={e => {
+        e.currentTarget.style.borderColor = '#004ccd'
+        e.currentTarget.style.color = '#004ccd'
+    }}
+    onMouseLeave={e => {
+        e.currentTarget.style.borderColor = 'var(--border)'
+        e.currentTarget.style.color = 'var(--muted)'
+    }}
+>
+    🎙
+</button>
         </div>
 
         {/* Nav items */}
@@ -634,6 +665,8 @@ export default function Layout() {
       >
         <Outlet />
       </main>
+
+      {showVoice && <VoiceShare onClose={() => setShowVoice(false)} />}
     </div>
   );
 }

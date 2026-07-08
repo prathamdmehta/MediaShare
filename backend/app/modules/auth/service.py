@@ -3,6 +3,9 @@
 import uuid
 from datetime import datetime, timedelta, timezone
 
+import httpx
+import re as _re
+
 from fastapi import HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -112,3 +115,78 @@ async def _create_refresh_token(user_id: uuid.UUID, db: AsyncSession) -> str:
     return raw   # return raw token to send to client — we never store this
 
 # Notice the timing attack prevention in login_user. If you return early when the user doesn't exist (before running verify_password), an attacker can measure the response time — fast response = email not registered, slow response = email registered but wrong password. Running bcrypt regardless makes both paths take the same time.
+
+async def google_auth(code: str, db: AsyncSession) -> tuple[User, str, str]:
+    """Exchange Google OAuth code for user info, create or find user."""
+
+    # Exchange code for tokens
+    async with httpx.AsyncClient() as client:
+        token_res = await client.post(
+            "https://oauth2.googleapis.com/token",
+            data={
+                "code": code,
+                "client_id": settings.google_client_id,
+                "client_secret": settings.google_client_secret,
+                "redirect_uri": settings.google_redirect_uri,
+                "grant_type": "authorization_code",
+            },
+        )
+        token_data = token_res.json()
+
+        if "error" in token_data:
+            raise HTTPException(status.HTTP_401_UNAUTHORIZED, "Google auth failed")
+
+        # Get user info from Google
+        user_info_res = await client.get(
+            "https://www.googleapis.com/oauth2/v2/userinfo",
+            headers={"Authorization": f"Bearer {token_data['access_token']}"},
+        )
+        user_info = user_info_res.json()
+
+    google_id = user_info["id"]
+    email = user_info["email"]
+    name = user_info.get("name", "")
+    picture = user_info.get("picture", "")
+
+    # Check if user exists by google_id
+    user = await db.scalar(select(User).where(User.google_id == google_id))
+
+    if not user:
+        # Check if email already registered (local account)
+        user = await db.scalar(select(User).where(User.email == email))
+        if user:
+            # Link Google to existing account
+            user.google_id = google_id
+            user.avatar_url = picture
+            user.is_verified = True
+            user.auth_provider = "google"
+        else:
+            # Create new user — generate username from email
+            base_username = _re.sub(r"[^a-z0-9_]", "_", email.split("@")[0].lower())[:25]
+            username = base_username
+            suffix = 1
+            while await db.scalar(select(User).where(User.username == username)):
+                username = f"{base_username}_{suffix}"
+                suffix += 1
+
+            user = User(
+                username=username,
+                email=email,
+                hashed_password=None,
+                google_id=google_id,
+                avatar_url=picture,
+                auth_provider="google",
+                is_verified=True,
+            )
+            db.add(user)
+            await db.flush()
+
+            # Create profile
+            from app.modules.users.models import Profile
+            db.add(Profile(user_id=user.id, display_name=name))
+
+    user.last_login_at = datetime.now(timezone.utc)
+    access_token = create_access_token(user.id, user.username, user.role)
+    refresh_token = await _create_refresh_token(user.id, db)
+
+    return user, access_token, refresh_token

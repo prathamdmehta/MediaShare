@@ -10,6 +10,10 @@ from slowapi import Limiter
 from slowapi.util import get_remote_address
 from fastapi import Request
 
+from urllib.parse import urlencode
+from app.config import get_settings
+from fastapi.responses import RedirectResponse
+
 limiter = Limiter(key_func=get_remote_address)
 
 router = APIRouter()
@@ -87,3 +91,32 @@ def _set_refresh_cookie(response: Response, token: str) -> None:
         max_age=30 * 24 * 60 * 60,  # 30 days in seconds
         path="/api/v1/auth", # cookie only sent to auth endpoints
     )
+
+@router.get("/google")
+async def google_login():
+    """Redirect user to Google OAuth consent screen."""
+    params = {
+        "client_id": get_settings().google_client_id,
+        "redirect_uri": get_settings().google_redirect_uri,
+        "response_type": "code",
+        "scope": "openid email profile",
+        "access_type": "offline",
+    }
+    google_auth_url = f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(google_auth_url)
+
+
+@router.get("/google/callback")
+async def google_callback(
+    code: str,
+    db: AsyncSession = Depends(get_db),
+):
+    user, access_token, refresh_token = await service.google_auth(code, db)
+
+    frontend_url = get_settings().frontend_url
+    redirect = RedirectResponse(
+        f"{frontend_url}/auth/callback#access_token={access_token}"
+    )
+    _set_refresh_cookie(redirect, refresh_token)
+    return redirect

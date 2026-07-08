@@ -15,6 +15,7 @@ import ProfilePage from './pages/ProfilePage'
 import SearchPage from './pages/SearchPage'
 import ProtectedRoute from './components/layout/ProtectedRoute'
 import Layout from './components/layout/Layout'
+import AuthCallbackPage from './pages/AuthCallbackPage'
 
 function App() {
     const { isAuthenticated, setAuth, clearAuth } = useAuthStore()
@@ -36,6 +37,7 @@ function App() {
                 <Route path="/" element={<LandingPage />} />
                 <Route path="/login" element={<LoginPage />} />
                 <Route path="/register" element={<RegisterPage />} />
+                <Route path="/auth/callback" element={<AuthCallbackPage />} />
 
                 {/* Protected routes */}
                 <Route element={<ProtectedRoute />}>

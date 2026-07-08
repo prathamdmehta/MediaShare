@@ -15,6 +15,8 @@ from slowapi.errors import RateLimitExceeded
 
 from app.modules.notifications.router import router as notifications_router
 
+from app.modules.ai.router import router as ai_router
+
 limiter = Limiter(key_func=get_remote_address)
 settings = get_settings()
 
@@ -65,6 +67,7 @@ app.include_router(
     prefix="/api/v1/notifications",
     tags=["notifications"]
 )
+app.include_router(ai_router, prefix="/api/v1/ai", tags=["ai"])
 
 # ── Health check ───────────────────────────────────────────────────
 @app.get("/health", tags=["system"])
